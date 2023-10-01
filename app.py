@@ -94,28 +94,49 @@ class App(customtkinter.CTk):
         self.tabviewTMTC.add("Last TC sent")
         self.tabviewTMTC.add("Last TM received")
 
-        self.tabviewTMTC.tab("Last TC sent").grid(rowspan=3, sticky="ns")
+        self.tabviewTMTC.tab("Last TC sent").grid(rowspan=2, column=0, sticky="nsew")
         self.tabviewTMTC.tab("Last TC sent").grid_columnconfigure(0, weight=1)  # configure grid of individual tabs
+        self.tabviewTMTC.tab("Last TC sent").grid_rowconfigure(0, weight=1)  # configure grid of individual tabs
 
         self.tabviewTMTC.tab("Last TM received").grid_columnconfigure(0, weight=1)
 
-        buffer_tc = [0x22, 0x23, 0x46, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78]
+        buffer_tc = [0x22, 0x23, 0x46, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78, 0x67, 0x78] * 10
 
         if(len(buffer_tc) == 0):
              #todo : protection if unavailable
             self.label_tab_1 = customtkinter.CTkLabel(self.tabviewTMTC.tab("Last TC sent"), text="No TC RECEIVE")
             self.label_tab_1.grid(row=0, column=0, padx=20, pady=20)
         else:    
-            #We create the buffer frame
+            # Créez le Scrollable Frame
             self.buffer_tc = customtkinter.CTkScrollableFrame(self.tabviewTMTC.tab("Last TC sent"))
-            self.buffer_tc.grid(row=0, rowspan=2, column=0, padx=0, pady=0, sticky="ns")
+            self.buffer_tc.grid(row=0, column=0, padx=0, pady=0, sticky="ns")
 
-            result_string=""
+            # Créez une grille pour afficher les éléments
             for i in range(len(buffer_tc)):
-                result_string += f"Élément {i + 1}:                          {buffer_tc[i]}\n"
-            
-            self.label_tab_i = customtkinter.CTkLabel(self.buffer_tc, text=result_string)
-            self.label_tab_i.grid(row=i, column=0, padx=(5, 5), pady=0)
+                row_index = i  # L'indice de la ligne dans la grille
+
+                # Créez un widget customtkinter.CTkFrame pour englober chaque paire d'étiquettes texte-valeur
+                item_frame = customtkinter.CTkFrame(self.buffer_tc, bg_color="#282828")
+                item_frame.grid(row=row_index, column=0, padx=0, pady=0, sticky="nsew")
+
+                # Créez un widget customtkinter.CTkLabel pour afficher l'élément (texte)
+                item_label = customtkinter.CTkLabel(
+                    item_frame,
+                    text=f"Index {i}: ",
+                    anchor="w",
+                )
+                item_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+
+                # Créez un autre widget customtkinter.CTkLabel pour afficher la valeur de l'élément
+                item_value_label = customtkinter.CTkLabel(
+                    item_frame,
+                    text=f"{buffer_tc[i]}",
+                    anchor="e",
+                )
+                item_value_label.grid(row=0, column=1, padx=(100,5), pady=2, sticky="e")
+
+            # Ajustez la configuration de la grille pour étirer la rangée 0
+            self.buffer_tc.grid_rowconfigure(0, weight=1)
         
         #todo : protection if unavailable
         self.label_tab_2 = customtkinter.CTkLabel(self.tabviewTMTC.tab("Last TM received"), text="TM RECEIVE")
@@ -226,15 +247,6 @@ class App(customtkinter.CTk):
         input_entry_1 = customtkinter.CTkEntry(input_dialog, placeholder_text="Zunit")
         input_entry_2 = customtkinter.CTkEntry(input_dialog)
         input_entry_3 = customtkinter.CTkEntry(input_dialog)
-
-        # Pack the input entries into the input dialog window
-        input_entry_1.pack()
-        input_entry_2.pack()
-        input_entry_3.pack()
-
-        # Add a submit button to the input dialog window
-        submit_button = customtkinter.CTkButton(input_dialog, text="Submit", command=test)
-        submit_button.pack()
 
         # Display the input dialog window
         input_dialog.mainloop()
