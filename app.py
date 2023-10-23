@@ -1,3 +1,6 @@
+
+import os
+import sys
 import tkinter
 from tkinter import StringVar
 import tkinter.messagebox
@@ -5,15 +8,21 @@ import customtkinter
 
 from PIL import Image, ImageTk
 
-
 import threading
 import time
+
+import socket
+import datetime
 
 #####################HOT RELOAD
 import os
 import sys
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+sys.path.append("/opt/ets.backup/python/lib/python3.10/site-packages/")
+
+from ets.pus.yoda.specifics.pus185 import TC185_150
 
 #################################################
 
@@ -32,6 +41,66 @@ class ReloadHandler(FileSystemEventHandler):
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+
+###########################################
+############SEND AND RECEIVE SECTION#######
+###########################################
+
+def create_tc_185_150(Zunit, askTM, timeout, nbCmd, commande):
+
+    #We get the value
+    tc = TC185_150()
+    tc.dgene_ar_zunit = Zunit
+    tc.dgene_ar_zasktm = askTM
+    tc.dgene_ar_dtimeout = timeout
+    tc.dgene_ar_ncmd = nbCmd
+
+    #Transform the command 
+    for i in range(len(commande)):
+        tc.dgene_ar_rcmd[i] = commande[i]
+
+    tc.encode()
+
+    #Service classic header
+    message = b'\xeb\x90\x20\x09\x06\x7b\x00\xff\x00\x00\x00\x00\x00\x00'
+
+    #Send UDP MESSAGE
+    receiveMessage = send_udp_message("127.0.0.1", 14567, message+tc._buffer)
+    
+    #Return 
+    return f"".join("%02X"%int.from_bytes(b, byteorder='little') for b in tc._buffer), receiveMessage
+
+def send_udp_message(host, port, message):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.connect((host, port))
+    sock.sendall(message)
+
+def thread_tm():
+    UDP_IP = "127.0.0.1"
+    UDP_PORT = 14568
+
+    # create udp socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((UDP_IP, UDP_PORT))
+
+    output_file = "reception/tm.txt"
+
+    i = 0
+    try:
+        while True:
+            data, addr = sock.recvfrom(1024)  # Réception du message UDP
+            current_time = datetime.datetime.now().strftime("%H:%M:%S")
+            formatted_data = ", ".join([f"0x{byte:02X}" for byte in data])
+            message = f"TM_{i} {current_time} [{formatted_data}]"
+            i += 1
+            # Écrire le message dans le fichier
+            with open(output_file, "a") as file:
+                file.write(message + "\n")
+
+    except KeyboardInterrupt:
+        print("UDP server was stoped.")
+    finally:
+        sock.close()
 
 def read_template_s185_file(filename):
     resultat = []
@@ -59,11 +128,12 @@ def display_template(self, last_state, ctkTemplateList):
             valuesTemplates = {tc['name']: tc for tc in resultat}
             # Créez le menu déroulant en utilisant le dictionnaire valuesTemplates
             self.label_template = customtkinter.CTkOptionMenu(ctkTemplateList, dynamic_resizing=False, values=list(valuesTemplates.keys()))
-            self.label_template.grid(row=0, column=1, padx=(20, 0), pady=(0, 0))
+            self.label_template.grid(row=0, column=0, padx=(0, 20), pady=(0, 0), columnspan=2)
+            self.label_template.columnconfigure((0,1,2), weight=1)
+
 
     self.after(1000, lambda :display_template(self, g_state, ctkTemplateList))
     
-
 def display_tc(self, last_list):
     global buffer_tc
 
@@ -127,23 +197,23 @@ def display_tmtc_first_word(file_path, ctkframe, nb_lines, self):
                 widget.destroy()
             if isinstance(widget, customtkinter.CTkButton):
                 widget.destroy()
+    
+        for line in lines:
+            words = line.split()
+            if words:
+                first_word = words[0]
+                date = words[1]
 
-    for line in lines:
-        words = line.split()
-        if words:
-            first_word = words[0]
-            date = words[1]
+                item_value_label = customtkinter.CTkLabel(ctkframe,text=f"{first_word}")
+                item_value_label.grid(row=i, column=0, padx=(5,5), pady=2, sticky="w")
 
-            item_value_label = customtkinter.CTkLabel(ctkframe,text=f"{first_word}")
-            item_value_label.grid(row=i, column=0, padx=(5,5), pady=2, sticky="w")
-
-            if(file_path == "reception/tc.txt"):
-                button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TC", i))
-            else:
-                button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TM", i))
-            button_print.grid(row=i, column=1, padx=(80,0), pady=2, sticky="e")
-            
-            i += 1
+                if(file_path == "reception/tc.txt"):
+                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TC", i))
+                else:
+                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TM", i))
+                button_print.grid(row=i, column=1, padx=(80,0), pady=2, sticky="e")
+                
+                i += 1
 
     self.after(1000, lambda:display_tmtc_first_word(file_path, ctkframe, nb_lines_now, self))
 
@@ -151,10 +221,18 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
 
+        #we launch the tm reception server thread
+        tmThread = threading.Thread(target=thread_tm) 
+
+        tmThread.start()
+
         # configure window
         self.title("TMTC GUI")
 
-        self.wm_iconbitmap("images/hemeria.ico")
+        img = tkinter.PhotoImage(file="images/hemeria.png")
+        self.tk.call('wm', 'iconphoto', self._w, img)
+
+        #self.wm_iconbitmap("images/hemeria.ico")
 
         # Obtenez la largeur et la hauteur de l'écran
         largeur_ecran = self.winfo_screenwidth()
@@ -296,8 +374,6 @@ class App(customtkinter.CTk):
         self.TC.rowconfigure((1,2,3), weight=0)
 
         #TEMPLATE TC
-        text_label = customtkinter.CTkLabel(self.TC, text="TEMPLATE TC :")
-        text_label.grid(row=0, column=0, padx=(5, 5), pady=(0, 0))
 
         self.after(0, lambda :display_template(self, 0, self.TC))
 
@@ -431,9 +507,22 @@ class App(customtkinter.CTk):
 
         buffer_tc = byte_list
 
+    def get_command_line_s185(self, command_name):
+        file_path = "templates/S185.txt"
+        with open(file_path, 'r') as file:
+            for line in file:
+                if line.startswith(command_name):
+                    # Séparez la ligne en mots en utilisant l'espace comme séparateur
+                    words = line.split()
+                    # Convertissez les éléments appropriés en entiers ou en chaînes
+                    command_elements = [words[0]] + [int(words[i]) if i in {1, 2, 3} else words[i] for i in range(1, len(words))]
+                    return command_elements
+        return None  # La commande n'a pas été trouvée
+
     def send_tc_template(self):
         selected_option = self.label_template.get()
-        print("Option sélectionnée :", selected_option)
+        tc_185_150 = self.get_command_line_s185(selected_option)
+        create_tc_185_150(tc_185_150[1], tc_185_150[2], tc_185_150[3], tc_185_150[4], tc_185_150[5])
     
 ##############HOT RELOAD
 
