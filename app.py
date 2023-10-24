@@ -26,19 +26,6 @@ from ets.pus.yoda.specifics.pus185 import TC185_150
 
 #################################################
 
-################################HOT RELOAD JUST FOR DEV
-
-# Remplacez "mon_application.py" par le nom de votre fichier principal
-MAIN_SCRIPT = "app.py"
-
-class ReloadHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if event.src_path.endswith(".py"):
-            print("Modification détectée. Rechargement de l'application...")
-            os.execv(sys.executable, ["python", MAIN_SCRIPT])
-
-##################################################################
-
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
@@ -46,7 +33,7 @@ customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "gre
 ############SEND AND RECEIVE SECTION#######
 ###########################################
 
-def create_tc_185_150(Zunit, askTM, timeout, nbCmd, commande):
+def create_tc_185_150(nameCommand, Zunit, askTM, timeout, nbCmd, commande):
 
     #We get the value
     tc = TC185_150()
@@ -66,9 +53,16 @@ def create_tc_185_150(Zunit, askTM, timeout, nbCmd, commande):
 
     #Send UDP MESSAGE
     receiveMessage = send_udp_message("127.0.0.1", 14567, message+tc._buffer)
-    
-    #Return 
-    return f"".join("%02X"%int.from_bytes(b, byteorder='little') for b in tc._buffer), receiveMessage
+
+    #We will add this in the tc file 
+    output_file = "reception/tc.txt"
+    data = message+tc._buffer
+    current_time = datetime.datetime.now().strftime("%H:%M:%S")
+    formatted_data = ", ".join([f"0x{byte:02X}" for byte in data])
+    message = f"{nameCommand} {current_time} [{formatted_data}]"
+    # Write in the file
+    with open(output_file, "a") as file:
+        file.write(message + "\n")
 
 def send_udp_message(host, port, message):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -128,8 +122,7 @@ def display_template(self, last_state, ctkTemplateList):
             valuesTemplates = {tc['name']: tc for tc in resultat}
             # Créez le menu déroulant en utilisant le dictionnaire valuesTemplates
             self.label_template = customtkinter.CTkOptionMenu(ctkTemplateList, dynamic_resizing=False, values=list(valuesTemplates.keys()))
-            self.label_template.grid(row=0, column=0, padx=(0, 20), pady=(0, 0), columnspan=2)
-            self.label_template.columnconfigure((0,1,2), weight=1)
+            self.label_template.grid(row=0, column=0, padx=(10, 0), pady=(0, 0), columnspan=2, sticky="ew")
 
 
     self.after(1000, lambda :display_template(self, g_state, ctkTemplateList))
@@ -137,111 +130,94 @@ def display_template(self, last_state, ctkTemplateList):
 def display_tc(self, last_list):
     global buffer_tc
 
-    #First of all we verify if the list is the same as before 
+    # First, verify if the list is the same as before
+    if buffer_tc != last_list:
+        # Clear the existing Text widget
+        self.buffer_tc.delete("1.0", "end")
 
-    if(buffer_tc != last_list):
+        # Create a table string to hold the new content
+        table = ""
+        for i in range(len(buffer_tc)):
+            hex_value = hex(buffer_tc[i])
+            table += f"Index {i}:\t\t\t{hex_value}\n"
 
-        if(len(buffer_tc) == 0):
-            #todo : protection if unavailable
-            self.label_tab_1 = customtkinter.CTkLabel(self.tabviewTMTC.tab("BRUT"), text="No TC RECEIVE")
-            self.label_tab_1.grid(row=0, column=0, padx=20, pady=20)
-        else:    
-            # Créez le Scrollable Frame
-            self.buffer_tc = customtkinter.CTkScrollableFrame(self.tabviewTMTC.tab("BRUT"))
-            self.buffer_tc.grid(row=0, column=0, padx=0, pady=0, sticky="ns")
+        # Update the Text widget with the new content
+        self.buffer_tc.insert("1.0", table)
 
-            # Créez une grille pour afficher les éléments
-            for i in range(len(buffer_tc)):
-                row_index = i  # L'indice de la ligne dans la grille
-
-                # Créez un widget customtkinter.CTkFrame pour englober chaque paire d'étiquettes texte-valeur
-                item_frame = customtkinter.CTkFrame(self.buffer_tc, bg_color="#282828")
-                item_frame.grid(row=row_index, column=0, padx=0, pady=0, sticky="nsew")
-
-                # Créez un widget customtkinter.CTkLabel pour afficher l'élément (texte)
-                item_label = customtkinter.CTkLabel(
-                    item_frame,
-                    text=f"Index {i}: ",
-                    anchor="w",
-                )
-                item_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
-
-                # Créez un autre widget customtkinter.CTkLabel pour afficher la valeur de l'élément
-                item_value_label = customtkinter.CTkLabel(
-                    item_frame,
-                    text=f"{buffer_tc[i]}",
-                    anchor="e",
-                )
-                item_value_label.grid(row=0, column=1, padx=(100,5), pady=2, sticky="e")
-
-            # Ajustez la configuration deC la grille pour étirer la rangée 0
-            self.buffer_tc.grid_rowconfigure(0, weight=1)
-
-    self.after(1000, lambda buffer_tc=buffer_tc:display_tc(self, buffer_tc))
+    self.after(500, lambda buffer_tc=buffer_tc: display_tc(self, buffer_tc))
 
 def display_tmtc_first_word(file_path, ctkframe, nb_lines, self):
 
-    # Chargez une image avec PIL (remplacez "mon_image.png" par le chemin de votre image)
+    # EYE LOGO
     image_pil = Image.open("images/eye.png")
-
-    # Convertissez l'image PIL en un format adapté à customtkinter
     image_customtkinter = customtkinter.CTkImage(image_pil)
-    i = 0
+
     with open(file_path, 'r') as file:
         lines = file.readlines()
         nb_lines_now = len(lines)
-    if(nb_lines != nb_lines_now):
-        #We delete all labels before do the check : 
-        for widget in ctkframe.winfo_children():
-            if isinstance(widget, customtkinter.CTkLabel):
-                widget.destroy()
-            if isinstance(widget, customtkinter.CTkButton):
-                widget.destroy()
     
-        for line in lines:
-            words = line.split()
+    if nb_lines != nb_lines_now:
+        if nb_lines_now > 0:
+            last_line = lines[-1]  # Get the file last
+            words = last_line.split()
             if words:
                 first_word = words[0]
                 date = words[1]
 
-                item_value_label = customtkinter.CTkLabel(ctkframe,text=f"{first_word}")
-                item_value_label.grid(row=i, column=0, padx=(5,5), pady=2, sticky="w")
+                item_value_label = customtkinter.CTkLabel(ctkframe, text=f"{first_word}")
+                item_value_label.grid(row=(len(lines)-1), column=0, padx=(5, 5), pady=2, sticky="w")
 
-                if(file_path == "reception/tc.txt"):
-                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TC", i))
+                if file_path == "reception/tc.txt":
+                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda: self.change_print_tmtc("TC", (len(lines)-1)))
                 else:
-                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda i=i: self.change_print_tmtc("TM", i))
-                button_print.grid(row=i, column=1, padx=(80,0), pady=2, sticky="e")
+                    button_print = customtkinter.CTkButton(ctkframe, image=image_customtkinter, text="", width=0, command=lambda: self.change_print_tmtc("TM", (len(lines)-1)))
                 
-                i += 1
+                button_print.grid(row=(len(lines)-1), column=2, padx=(0, 5), pady=2, sticky="e")
 
-    self.after(1000, lambda:display_tmtc_first_word(file_path, ctkframe, nb_lines_now, self))
+                ctkframe.columnconfigure(2, weight=1)
+    
+    self.after(1000, lambda: display_tmtc_first_word(file_path, ctkframe, nb_lines_now, self))
 
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
+
+        self.init_app()
+
+        #We flush the differents files
+        with open("reception/tc.txt", 'w') as fichier:
+            fichier.truncate(0)
+
+        with open("reception/tm.txt", 'w') as fichier:
+            fichier.truncate(0)
 
         #we launch the tm reception server thread
         tmThread = threading.Thread(target=thread_tm) 
 
         tmThread.start()
 
-        # configure window
+        self.after(0, lambda:display_tmtc_first_word("reception/tc.txt", self.tc_list, 0, self))
+        self.after(1000, lambda:display_tmtc_first_word("reception/tm.txt", self.tm_list, 0, self))
+        self.after(0, lambda:display_tc(self, []))
+        self.after(0, lambda :display_template(self, 0, self.TC))
+
+        global g_state
+        g_state = self.change_state("S185")
+        
+        global g_tmtc
+        g_tmtc = ["TC", 0]
+
+    def init_app(self):
+
+         # configure window
         self.title("TMTC GUI")
 
+        #configure logo
         img = tkinter.PhotoImage(file="images/hemeria.png")
         self.tk.call('wm', 'iconphoto', self._w, img)
 
-        #self.wm_iconbitmap("images/hemeria.ico")
-
-        # Obtenez la largeur et la hauteur de l'écran
-        largeur_ecran = self.winfo_screenwidth()
-        hauteur_ecran = self.winfo_screenheight()
-
-        # Définissez la géométrie de la fenêtre pour qu'elle s'adapte à la taille de l'écran
-        self.geometry(f"{largeur_ecran/2}x{hauteur_ecran/2}")
-
-        #self.state("zoomed")
+        #configure size of windows
+        self.state("normal")
 
         # configure grid layout (4x4)
         self.grid_columnconfigure((1,2), weight=2)
@@ -286,16 +262,14 @@ class App(customtkinter.CTk):
         #mode selection
         self.appearance_mode_label = customtkinter.CTkLabel(self.sidebar_frame, text="Appearance Mode:", anchor="w")
         self.appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
-        self.appearance_mode_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=["Light", "Dark", "System"],
-                                                                       command=self.change_appearance_mode_event)
+        self.appearance_mode_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=["Light", "Dark", "System"], command=self.change_appearance_mode_event)
         self.appearance_mode_optionemenu.grid(row=6, column=0, padx=20, pady=(10, 10))
         self.appearance_mode_optionemenu.set("Dark")
 
         #scale selection
         self.scaling_label = customtkinter.CTkLabel(self.sidebar_frame, text="UI Scaling:", anchor="w")
         self.scaling_label.grid(row=7, column=0, padx=20, pady=(10, 0))
-        self.scaling_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"],
-                                                               command=self.change_scaling_event)
+        self.scaling_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"], command=self.change_scaling_event)
         self.scaling_optionemenu.grid(row=8, column=0, padx=20, pady=(10, 20))
         self.scaling_optionemenu.set("100%")
 
@@ -307,31 +281,31 @@ class App(customtkinter.CTk):
         self.tabviewLISTTMTC.add("Last TM received")
 
         
-        self.tabviewLISTTMTC.tab("Last TC sent").grid(rowspan=5, column=0, sticky="nsew")
+        self.tabviewLISTTMTC.tab("Last TC sent").grid(rowspan=5, column=0, columnspan=2, sticky="nsew",)
         self.tabviewLISTTMTC.tab("Last TC sent").grid_columnconfigure(0, weight=1)  # configure grid of individual tabs
         self.tabviewLISTTMTC.tab("Last TC sent").grid_rowconfigure(0, weight=1)  # configure grid of individual tabs
 
-        self.tabviewLISTTMTC.tab("Last TM received").grid(rowspan=5, column=0, sticky="nsew")
+        self.tabviewLISTTMTC.tab("Last TM received").grid(rowspan=5, column=0, columnspan=2, sticky="nsew")
         self.tabviewLISTTMTC.tab("Last TM received").grid_columnconfigure(0, weight=1)  # configure grid of individual tabs
         self.tabviewLISTTMTC.tab("Last TM received").grid_rowconfigure(0, weight=1)  # configure grid of individual tabs
+        self.tabviewLISTTMTC.tab("Last TM received").grid_remove()
 
         #############################################
         #####PSEUDO THREAD WHO PRINT TC SEND#########
         #############################################
 
         self.tc_list = customtkinter.CTkScrollableFrame(self.tabviewLISTTMTC.tab("Last TC sent"))
-        self.tc_list.grid(row=0, column=0, padx=0, pady=0, sticky="ns")
+        self.tc_list.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
-        self.after(0, lambda:display_tmtc_first_word("reception/tc.txt", self.tc_list, 0, self))
+        item_value_label = customtkinter.CTkLabel(self.tc_list,text="No TC sent")
+        item_value_label.grid(row=0, column=0, padx=(5,5), pady=2, sticky="nsew")
 
         #############################################
         #####PSEUDO THREAD WHO PRINT TM SEND#########
         #############################################
 
         self.tm_list = customtkinter.CTkScrollableFrame(self.tabviewLISTTMTC.tab("Last TM received"))
-        self.tm_list.grid(row=0, column=0, padx=0, pady=0, sticky="ns")
-
-        self.after(0, lambda:display_tmtc_first_word("reception/tm.txt", self.tm_list, 0, self))
+        self.tm_list.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
         #TABVIEW TC OR TM BRUT
 
@@ -345,13 +319,18 @@ class App(customtkinter.CTk):
         self.tabviewTMTC.tab("BRUT").grid_columnconfigure(0, weight=1)  # configure grid of individual tabs
         self.tabviewTMTC.tab("BRUT").grid_rowconfigure(0, weight=1)  # configure grid of individual tabs
 
+        # Create Scrollable Frame
+        self.buffer_tc = customtkinter.CTkTextbox(self.tabviewTMTC.tab("BRUT"))
+        self.buffer_tc.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+
+        #Default label
+        self.buffer_tc.insert("0.0", "Waiting...")
+
         self.tabviewTMTC.tab("DECODED").grid_columnconfigure(0, weight=1)
 
         global buffer_tc 
 
         buffer_tc = []
-
-        self.after(0, lambda:display_tc(self, []))
         
         #todo : protection if unavailable
         self.label_tab_2 = customtkinter.CTkLabel(self.tabviewTMTC.tab("DECODED"), text="TM RECEIVE")
@@ -375,10 +354,7 @@ class App(customtkinter.CTk):
 
         #TEMPLATE TC
 
-        self.after(0, lambda :display_template(self, 0, self.TC))
-
         self.template_button = customtkinter.CTkButton(self.TC, text="Send", command=self.send_tc_template)
-
         self.template_button.grid(row=0, column=2, padx=(20, 0), pady=(0, 0))
 
         #SPECIFIC TC
@@ -396,12 +372,6 @@ class App(customtkinter.CTk):
          
         self.template_button = customtkinter.CTkButton(self.TC_CUSTOM, text="Write custom TC", command=self.get_user_input)
         self.template_button.grid(row=0, column=1, padx=(50, 0), pady=(0, 0))
-
-        global g_state
-        g_state = self.change_state("S185")
-        
-        global g_tmtc
-        g_tmtc = ["TC", 0]
 
     def open_input_dialog_event(self):
         if(g_state == "S185"):
@@ -522,26 +492,15 @@ class App(customtkinter.CTk):
     def send_tc_template(self):
         selected_option = self.label_template.get()
         tc_185_150 = self.get_command_line_s185(selected_option)
-        create_tc_185_150(tc_185_150[1], tc_185_150[2], tc_185_150[3], tc_185_150[4], tc_185_150[5])
+
+        #We transform the str to int list
+        byte_data = bytes.fromhex(tc_185_150[5])
+        integer_list = list(byte_data)
+
+        create_tc_185_150(tc_185_150[0], int(tc_185_150[1]), int(tc_185_150[2]), int(tc_185_150[3]), int(tc_185_150[4]), integer_list)
     
-##############HOT RELOAD
-
-if __name__ == "__main__":
-    event_handler = ReloadHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path=".", recursive=True)
-    observer.start()
-
-    try:
-        app = App()
-        app.mainloop()
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-########################
-
 #####MAIN 
 
-#if __name__ == "__main__":
-#    app = App()
-#    app.mainloop()
+if __name__ == "__main__":
+   app = App()
+   app.mainloop()
