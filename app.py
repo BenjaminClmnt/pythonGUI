@@ -420,16 +420,33 @@ class App(customtkinter.CTk):
 
     # Définissez une fonction pour afficher la fenêtre de dialogue
     def get_user_input(self):
-        # Create a new input dialog window
-        input_dialog = customtkinter.CTkInputDialog(text="Type in a number:", title="CTkInputDialog")
+        # # Create a new input dialog window
+        input_dialog = customtkinter.CTkInputDialog(text="SOON")
 
-        # Add three input entries to the input dialog window
-        input_entry_1 = customtkinter.CTkEntry(input_dialog, placeholder_text="Zunit")
-        input_entry_2 = customtkinter.CTkEntry(input_dialog, placeholder_text="Zunit2")
-        input_entry_3 = customtkinter.CTkEntry(input_dialog, placeholder_text="Zunit3")
+        # # Créez un cadre pour organiser les nouveaux widgets
+        # new_frame = customtkinter.CTkFrame(input_dialog)
 
-        # Display the input dialog window
-        input_dialog.mainloop()
+        # # Ajoutez les nouveaux widgets au cadre
+        # input_entry_1 = customtkinter.CTkEntry(new_frame, placeholder_text="Zunit")
+        # input_entry_2 = customtkinter.CTkEntry(new_frame, placeholder_text="Ask_TM")
+        # input_entry_3 = customtkinter.CTkEntry(new_frame, placeholder_text="Timeout")
+        # input_entry_4 = customtkinter.CTkEntry(new_frame, placeholder_text="N_CMD")
+        # input_entry_5 = customtkinter.CTkEntry(new_frame, placeholder_text="R_CMD")
+        # submit = customtkinter.CTkButton(new_frame, text="Write custom TC", command=self.submit_callback(input_dialog, input_entry_1, input_entry_2, input_entry_3, input_entry_4, input_entry_5))
+
+        # # Organisez les widgets dans le cadre en utilisant "pack"
+        # input_entry_1.pack()
+        # input_entry_2.pack()
+        # input_entry_3.pack()
+        # input_entry_4.pack()
+        # input_entry_5.pack()
+        # submit.pack()
+
+        # # Ajoutez le cadre à l'objet input_dialog en utilisant "pack" ou "grid" selon vos besoins
+        # new_frame.pack()  # Ou new_frame.grid(...)
+
+        # # Display the input dialog window
+        # input_dialog.mainloop()
 
     def change_print_tmtc(self, type, line_number):
         global g_tmtc
