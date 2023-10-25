@@ -138,8 +138,7 @@ def display_tc(self, last_list):
         # Create a table string to hold the new content
         table = ""
         for i in range(len(buffer_tc)):
-            hex_value = hex(buffer_tc[i])
-            table += f"Index {i}:\t\t\t{hex_value}\n"
+            table += f"Index {i}:\t\t\t{buffer_tc[i]}\n"
 
         # Update the Text widget with the new content
         self.buffer_tc.insert("1.0", table)
@@ -490,7 +489,7 @@ class App(customtkinter.CTk):
                     for element in byte_elements:
                         element = element.strip()
                         if element:
-                            byte_list.append(int(element, 0))
+                            byte_list.append(element)
 
         buffer_tc = byte_list
 
