@@ -5,20 +5,13 @@ import tkinter
 from tkinter import StringVar
 import tkinter.messagebox
 import customtkinter
-
+import json
+import importlib
 from PIL import Image, ImageTk
-
 import threading
 import time
-
 import socket
 import datetime
-
-#####################HOT RELOAD
-import os
-import sys
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 sys.path.append("/opt/ets.backup/python/lib/python3.10/site-packages/")
 
@@ -52,19 +45,21 @@ def create_tc_185_150(nameCommand, Zunit, askTM, timeout, nbCmd, commande):
     message = b'\xeb\x90\x20\x09\x06\x7b\x00\xff\x00\x00\x00\x00\x00\x00'
 
     #Send UDP MESSAGE
-    receiveMessage = send_udp_message("127.0.0.1", 14567, message+tc._buffer)
+    receiveMessage = send_udp_message("127.0.0.1", 14567, nameCommand, message+tc._buffer)
+
+
+def send_udp_message(host, port, nameCommand, message):
 
     #We will add this in the tc file 
     output_file = "reception/tc.txt"
-    data = message+tc._buffer
+    data = message
     current_time = datetime.datetime.now().strftime("%H:%M:%S")
     formatted_data = ", ".join([f"0x{byte:02X}" for byte in data])
-    message = f"{nameCommand} {current_time} [{formatted_data}]"
+    writeMessage = f"{nameCommand} {current_time} [{formatted_data}]"
     # Write in the file
     with open(output_file, "a") as file:
-        file.write(message + "\n")
+        file.write(writeMessage + "\n")
 
-def send_udp_message(host, port, message):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.connect((host, port))
     sock.sendall(message)
@@ -115,7 +110,6 @@ def read_template_s185_file(filename):
 def display_template(self, last_state, ctkTemplateList):
     global g_state
 
-    #Penser a supprimer tous les objets si on change d'état
     if(g_state != last_state):
         if(g_state == "S185" or g_state == None):
             resultat = read_template_s185_file("templates/S185.txt")
@@ -123,7 +117,6 @@ def display_template(self, last_state, ctkTemplateList):
             # Créez le menu déroulant en utilisant le dictionnaire valuesTemplates
             self.label_template = customtkinter.CTkOptionMenu(ctkTemplateList, dynamic_resizing=False, values=list(valuesTemplates.keys()))
             self.label_template.grid(row=0, column=0, padx=(10, 0), pady=(0, 0), columnspan=2, sticky="ew")
-
 
     self.after(1000, lambda :display_template(self, g_state, ctkTemplateList))
     
@@ -181,6 +174,9 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
 
+        global data
+        data = self.read_json_file("test/services.json")
+
         self.init_app()
 
         #We flush the differents files
@@ -198,13 +194,30 @@ class App(customtkinter.CTk):
         self.after(0, lambda:display_tmtc_first_word("reception/tc.txt", self.tc_list, 0, self))
         self.after(1000, lambda:display_tmtc_first_word("reception/tm.txt", self.tm_list, 0, self))
         self.after(0, lambda:display_tc(self, []))
-        self.after(0, lambda :display_template(self, 0, self.TC))
+        
+        
+        
+        
+        #self.after(0, lambda :display_template(self, 0, self.TC))
 
         global g_state
-        g_state = self.change_state("S185")
+        g_state = "185_150"
+        g_state = self.change_state("185_150")
         
         global g_tmtc
         g_tmtc = ["TC", 0]
+
+    def read_json_file(self, file_name):
+        try:
+            with open(file_name, 'r') as file:
+                data = json.load(file)
+                return data
+        except FileNotFoundError:
+            print(f"The file {file_name} does not exist.")
+            return None
+        except json.JSONDecodeError:
+            print(f"JSON decoding error in the file {file_name}.")
+            return None
 
     def init_app(self):
 
@@ -239,18 +252,15 @@ class App(customtkinter.CTk):
         ###########################################################
 
         #button of the sidebar
+        global data 
 
-        #button 1
-        self.sidebar_button_1 = customtkinter.CTkButton(self.sidebar_frame, command=lambda: self.change_state("S17"), text="Service 17")
-        self.sidebar_button_1.grid(row=1, column=0, padx=20, pady=10)
-
-        #button 2
-        self.sidebar_button_2 = customtkinter.CTkButton(self.sidebar_frame, command=lambda: self.change_state("S185"), text="Service 185")
-        self.sidebar_button_2.grid(row=2, column=0, padx=20, pady=10)
-
-        #button3
-        self.sidebar_button_3 = customtkinter.CTkButton(self.sidebar_frame, command=lambda: self.change_state("S3"), text="Service 3")
-        self.sidebar_button_3.grid(row=3, column=0, padx=20, pady=10)
+        if data:
+            i = 1
+            for service in data['services']:
+                textButton = "Service  " + service['service_name']
+                sidebar_button = customtkinter.CTkButton(self.sidebar_frame, command=lambda service_name=service['service_name']: self.change_state(service_name), text=textButton)
+                sidebar_button.grid(row=i, column=0, padx=20, pady=10)
+                i += 1
 
         ###########################################################
         #######################SETTINGS BUTTON#####################
@@ -342,6 +352,8 @@ class App(customtkinter.CTk):
         self.textbox.grid(row=0, column=1, padx=(20, 0), pady=(20, 0), sticky="nsew")
         self.textbox.insert("0.0", "CTkTextbox\n\n" + "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\n\n" * 2)
         
+
+
         #Sending TC
 
         self.TC = customtkinter.CTkFrame(self)
@@ -371,6 +383,9 @@ class App(customtkinter.CTk):
          
         self.template_button = customtkinter.CTkButton(self.TC_CUSTOM, text="Write custom TC", command=self.get_user_input)
         self.template_button.grid(row=0, column=1, padx=(50, 0), pady=(0, 0))
+        
+        #We init state with 
+        self.change_state("185_150")
 
     def open_input_dialog_event(self):
         if(g_state == "S185"):
@@ -381,7 +396,7 @@ class App(customtkinter.CTk):
             dialog = customtkinter.CTkInputDialog(text="Type in a number:" + g_state, title="CTkInputDialog")
             print("CTkInputDialog:", dialog.get_input())
 
-        elif(g_state == "S3"):
+        elif(g_state == "S140"):
             dialog = customtkinter.CTkInputDialog(text="Type in a number:" + g_state, title="CTkInputDialog")
             print("CTkInputDialog:", dialog.get_input())
 
@@ -392,30 +407,146 @@ class App(customtkinter.CTk):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
         customtkinter.set_widget_scaling(new_scaling_float)
 
-    def sidebar_button_event1(self):
-        print("sidebar_button click v1")
+    def search_line_by_first_word(self,file, keyword):
+        found_lines = []
+        
+        with open(file, 'r') as file:
+            for line in file:
+                words = line.strip().split()
+                if words and words[0] == keyword:
+                    found_lines.append(words)
+        
+        return found_lines
 
-    def sidebar_button_event(self):
-        print("sidebar_button click")
+    def send_tc_simplist(self):
+        global g_state
+        global data
+        if data:
+            for service in data['services']:
+                if(service["service_name"] == g_state):
+                    module = importlib.import_module(service['ets_module'])
+                    functions = {}
+                    functions[service['function']] = getattr(module, service['function'])
+                    tc = functions[service['function']]()
+                    tc.encode()
+                    header = b'\xeb\x90\x20\x09\x06\x7b\x00\xff\x00\x00\x00\x00\x00\x00'
+                    send_udp_message("127.0.0.1", 14567, service["service_name"], header+tc._buffer)
+
+    def send_tc_template_test(self):
+        global g_state
+        global data
+        selected_option = self.label_template.get()
+        if data:
+            print(g_state)
+            for service in data['services']:
+                if(service["service_name"] == g_state):
+                    # Specify the file path you want to read
+                    file_path = "templates/" + service["service_name"] + ".txt"
+                    command_tc = self.search_line_by_first_word(file_path, selected_option)
+                    module = importlib.import_module(service['ets_module'])
+                    functions = {}
+                    functions[service['function']] = getattr(module, service['function'])
+                    tc = functions[service['function']]()
+                    customs_fields = list(service['fields_customizables'])
+                    customs_fields_type = list(service['fields_type'])
+
+                    for i in range(len(customs_fields)):
+                        print(customs_fields[i])
+                        print(command_tc[0][i+1])
+                        if(customs_fields_type[i] != "ArrayType"):
+                            setattr(tc, customs_fields[i], command_tc[0][i+1])
+                        else:
+                            #We transform the str to int list
+                            print(command_tc[0][i+1])
+                            byte_data = bytes.fromhex(command_tc[0][i+1])
+                            integer_list = list(byte_data)
+
+                            for j in range(len(integer_list)):
+                                getattr(tc, customs_fields[i])[j] = integer_list[j]
+                    tc.encode()
+                    print(tc)
+        
+
+    def create_tc_frame(self, service, customizable):
+        #If we have a customizable frame
+        if(customizable == 1):
+            #Sending TC
+            self.TC = customtkinter.CTkFrame(self)
+            self.TC.grid(row=1, column=1, padx=(20,0), pady=(20,0), sticky="nsew")
+
+            self.TC.columnconfigure((0,1,2), weight=1)
+            self.TC.rowconfigure((0), weight=1)
+            self.TC.rowconfigure((1,2,3), weight=0)
+
+            #Insert template from file
+
+            # Specify the file path you want to read
+            file_path = "templates/" + service + ".txt"
+
+            # Initialize a list to store the first elements of each line
+            first_elements_list = []
+
+            with open(file_path, 'r') as file:
+                for line in file:
+                    # Split the line into words using a space as the separator
+                    words = line.split()
+                    if words:
+                        # Add the first element to the list
+                        first_elements_list.append(words[0])
+ 
+            self.label_template = customtkinter.CTkOptionMenu(self.TC, dynamic_resizing=False, values=first_elements_list)
+            self.label_template.grid(row=0, column=0, padx=(10, 0), pady=(0, 0), columnspan=2, sticky="ew")
+
+            self.template_button = customtkinter.CTkButton(self.TC, text="Send", command=self.send_tc_template_test)
+            self.template_button.grid(row=0, column=2, padx=(20, 0), pady=(0, 0))
+
+            #SPECIFIC TC
+
+            self.TC_CUSTOM = customtkinter.CTkFrame(self)
+            self.TC_CUSTOM.grid(row=2, column=1, padx=(20,0), pady=(20,0), sticky="nsew")
+
+            self.TC_CUSTOM.columnconfigure((0,1,2), weight=1)
+            self.TC_CUSTOM.rowconfigure((0), weight=1)
+            self.TC_CUSTOM.rowconfigure((1,2,3), weight=0)
+
+            #TEMPLATE TC_CUSTOM
+            text_label = customtkinter.CTkLabel(self.TC_CUSTOM, text="CUSTOM A TC :")
+            text_label.grid(row=0, column=0, padx=(30, 0), pady=(0, 0))
+            
+            self.template_button = customtkinter.CTkButton(self.TC_CUSTOM, text="Write custom TC", command=self.get_user_input)
+            self.template_button.grid(row=0, column=1, padx=(50, 0), pady=(0, 0))
+
+        else:
+
+            #SEND SIMPLIST TC
+            self.TC = customtkinter.CTkFrame(self)
+            self.TC.grid(row=1, column=1, padx=(20,0), pady=(20,0), sticky="nsew")
+
+            self.TC.columnconfigure((0,1,2), weight=1)
+            self.TC.rowconfigure((0), weight=1)
+            self.TC.rowconfigure((1,2,3), weight=0)
+
+            #TEMPLATE TC
+            self.template_button = customtkinter.CTkButton(self.TC, text="Send", command=self.send_tc_simplist)
+            self.template_button.grid(row=0, column=1, padx=(20, 0), pady=(0, 0))
 
     def change_state(self, state):
+
         global g_state
         g_state = state
-        
-        #A definir générique
-        if(g_state == "S185"):
-            new_text = "Service185 : \n\nService permettant la gestion des équipements. Il permet à partir de l'ID d'un équipement demandé à effectuer une commande. Cette commande peut-être de type executif ou informationnelle. La TC qui compose se service possède les champs suivants :  \n\n- Zunit : ID de l'équipement que l'on souhaite envoyer une commande\n\n- askTM : On précise si l'on souhaite obtenir une réponse ou non\n\n- Timeout : Si l'équipement n'a pas répondu dans le temps imparti (en s), on lève une TM d'erreur\n\n- Commande : On décrit ici la commande que l'on souhaite envoyé"
-            self.textbox.delete("0.0", customtkinter.END)  # Efface tout le texte existant dans le CTkTextbox
-            self.textbox.insert("0.0", new_text)
 
-        elif(g_state == "S17"):
-            new_text = "Service17 : \n\nService permettant d'envoyer un ping."
-            self.textbox.delete("0.0", customtkinter.END)  # Efface tout le texte existant dans le CTkTextbox
-            self.textbox.insert("0.0", new_text)
-        elif(g_state == "S3"):
-            new_text = "Service3 : \n\nService non défini."
-            self.textbox.delete("0.0", customtkinter.END)  # Efface tout le texte existant dans le CTkTextbox
-            self.textbox.insert("0.0", new_text)
+        global data
+
+        for service in data['services']:
+            if service["service_name"] == state:
+                self.textbox.delete("0.0", customtkinter.END)  # Efface tout le texte existant dans le CTkTextbox
+                self.textbox.insert("0.0", service["description"])
+                if(self.TC_CUSTOM.winfo_exists) :    
+                    self.TC_CUSTOM.destroy()
+                if(self.TC.winfo_exists):
+                    self.TC.destroy()
+                self.create_tc_frame(service["service_name"], service["customizable"])
+                break
 
     # Définissez une fonction pour afficher la fenêtre de dialogue
     def get_user_input(self):
